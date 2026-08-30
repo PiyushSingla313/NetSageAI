@@ -18,15 +18,20 @@ log) with an original frontend implementation.
 ```
                 Case (symptom + CLI evidence)
                             |
-              +-------------+-------------+
-              |                           |
-   Deterministic Rule Engine     AI Diagnosis Engine
-   (checker/rule_checker.py)     (prompts/diagnose_prompt.md
-    regex/pattern checks for      + src/ai_engine.py)
-    interfaces, VLANs, ACLs,      LLM call with JSON-schema
-    routes, DHCP, OSPF/EIGRP...   output + offline fallback
-              |                           |
-              +-------------+-------------+
+              Deterministic Rule Engine
+              (checker/rule_checker.py)
+              regex/pattern checks for
+              interfaces, VLANs, ACLs,
+              routes, DHCP, OSPF/EIGRP...
+                            |
+                  rule findings passed in
+                  as pre-verified context
+                            |
+                AI Diagnosis Engine
+              (prompts/diagnose_prompt.md
+               + src/ai_engine.py)
+              LLM call with JSON-schema
+              output + offline fallback
                             |
                 Human Review (Accept / Edit / Reject)
               (netsage_cli.py terminal workbench,
@@ -37,6 +42,10 @@ log) with an original frontend implementation.
      Verified fix / CLI commands   Responsible AI Log
                                     (docs/responsible_ai_log.md)
 ```
+
+The rule engine always runs first and its findings are fed into the AI
+diagnosis prompt as pre-verified facts (see `_build_user_prompt` in
+`src/ai_engine.py`) — the two stages run sequentially, not in parallel.
 
 ## Deliverables
 

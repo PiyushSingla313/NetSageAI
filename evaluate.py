@@ -22,6 +22,7 @@ from pathlib import Path
 from checker.rule_checker import run_rule_checks
 from src.ai_engine import diagnose
 from src.models import Case
+from netsage_cli import prompt_for_api_key
 
 ROOT = Path(__file__).resolve().parent
 DATASET_PATH = ROOT / "dataset" / "cases.csv"
@@ -72,6 +73,7 @@ def main() -> None:
 
     cases = load_cases()
     reviews = load_review_log()
+    api_key = prompt_for_api_key()
 
     rule_hits = 0
     ai_correct = 0
@@ -83,7 +85,7 @@ def main() -> None:
         if rule_result.triggered:
             rule_hits += 1
 
-        diag = diagnose(case, [f.__dict__ for f in rule_result.findings])
+        diag = diagnose(case, [f.__dict__ for f in rule_result.findings], api_key=api_key)
 
         is_correct = _root_cause_matches(case.root_cause, diag.root_cause)
         if is_correct:

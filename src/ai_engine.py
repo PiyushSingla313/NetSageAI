@@ -62,11 +62,9 @@ def _extract_json(raw_text: str) -> dict:
     return json.loads(cleaned)
 
 
-def _call_gemini(system_prompt: str, user_prompt: str) -> Optional[dict]:
-    api_key = os.environ.get("GEMINI_API_KEY")
-    api_key = "AQ.Ab8RN6Id5OtdOEd0YXzObZGKgQe0GtFw8MUQLWzLl5RDqZMO6Q"
-    model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-    print("piyush", api_key)
+def _call_gemini(system_prompt: str, user_prompt: str, api_key: Optional[str] = None) -> Optional[dict]:
+    api_key = api_key or os.environ.get("GEMINI_API_KEY")
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
     if not api_key or not _HAS_GEMINI:
         return None
     try:
@@ -134,12 +132,18 @@ def _offline_diagnose(case: Case, rule_findings: list) -> Diagnosis:
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def diagnose(case: Case, rule_findings: list) -> Diagnosis:
-    """Diagnose a single case. Tries the LLM first, falls back to offline heuristics."""
+def diagnose(case: Case, rule_findings: list, api_key: Optional[str] = None) -> Diagnosis:
+    """Diagnose a single case. Tries the LLM first, falls back to offline heuristics.
+
+    api_key, if given, takes precedence over the GEMINI_API_KEY environment
+    variable. A missing or invalid key (or any other API failure) is
+    caught in _call_gemini and results in the offline fallback below --
+    it never raises.
+    """
     system_prompt = _load_system_prompt()
     user_prompt = _build_user_prompt(case, rule_findings)
 
-    result = _call_gemini(system_prompt, user_prompt)
+    result = _call_gemini(system_prompt, user_prompt, api_key)
     if result is not None:
         try:
             return Diagnosis(

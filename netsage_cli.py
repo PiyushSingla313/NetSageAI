@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from pathlib import Path
 
 from checker.rule_checker import run_rule_checks
@@ -24,6 +25,26 @@ from src.models import Case, ReviewRecord
 ROOT = Path(__file__).resolve().parent
 DATASET_PATH = ROOT / "dataset" / "cases.csv"
 REVIEW_LOG_PATH = ROOT / "dataset" / "review_log.json"
+
+
+def prompt_for_api_key() -> str | None:
+    """Ask the user for a Gemini API key. Falls back to GEMINI_API_KEY from
+    the environment/.env if the user leaves the prompt blank, and to the
+    offline heuristic engine (see src/ai_engine.py) if neither is set or the
+    key turns out to be invalid when it's actually used."""
+    key = input(
+        "Enter your Gemini API key (leave blank to use offline mode): "
+    ).strip()
+    if key:
+        return key
+
+    env_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if env_key:
+        print("No key entered — using GEMINI_API_KEY from the environment.")
+        return env_key
+
+    print("No API key provided — running in offline mode (rule-informed heuristics only).")
+    return None
 
 
 def load_cases() -> list[Case]:
@@ -55,14 +76,17 @@ def print_case(case: Case) -> None:
     print(f"CLI evidence:\n{case.cli_snippet}\n")
 
 
-def review_flow(case: Case) -> None:
+def review_flow(case: Case, api_key: str | None) -> None:
     rule_result = run_rule_checks(case.case_id, case.evidence_text())
     print(f"Rule checker: {'TRIGGERED' if rule_result.triggered else 'clean'} "
           f"({len(rule_result.findings)} finding(s))")
     for f in rule_result.findings:
         print(f"  - [{f.rule_id}] {f.message}")
 
-    diag = diagnose(case, [f.__dict__ for f in rule_result.findings])
+    diag = diagnose(case, [f.__dict__ for f in rule_result.findings], api_key=api_key)
+    if api_key and diag.source != "ai":
+        print("\n[!] Gemini call failed or returned malformed output (key may be invalid) — "
+              "falling back to offline mode for this case.")
     print(f"\nAI diagnosis (source={diag.source}, confidence={diag.confidence}):")
     print(f"  Root cause : {diag.root_cause}")
     print(f"  Evidence   : {diag.evidence}")
@@ -104,6 +128,7 @@ def review_flow(case: Case) -> None:
 
 def main() -> None:
     cases = load_cases()
+    api_key = prompt_for_api_key()
     while True:
         print("\nNetSage AI — Terminal Workbench")
         print(f"{len(cases)} cases loaded. Enter a case ID (e.g. NS-001), 'list', or 'q' to quit.")
@@ -122,7 +147,7 @@ def main() -> None:
             continue
 
         print_case(match)
-        review_flow(match)
+        review_flow(match, api_key)
 
 
 if __name__ == "__main__":
