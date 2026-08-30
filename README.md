@@ -15,32 +15,25 @@ log) with an original frontend implementation.
 
 ## Architecture
 
-```
-                Case (symptom + CLI evidence)
-                            |
-              Deterministic Rule Engine
-              (checker/rule_checker.py)
-              regex/pattern checks for
-              interfaces, VLANs, ACLs,
-              routes, DHCP, OSPF/EIGRP...
-                            |
-                  rule findings passed in
-                  as pre-verified context
-                            |
-                AI Diagnosis Engine
-              (prompts/diagnose_prompt.md
-               + src/ai_engine.py)
-              LLM call with JSON-schema
-              output + offline fallback
-                            |
-                Human Review (Accept / Edit / Reject)
-              (netsage_cli.py terminal workbench,
-               or app/ web dashboard)
-                            |
-              +-------------+-------------+
-              |                           |
-     Verified fix / CLI commands   Responsible AI Log
-                                    (docs/responsible_ai_log.md)
+```mermaid
+flowchart TD
+    A["Case: symptom + CLI evidence"]
+    B["Deterministic Rule Engine (checker/rule_checker.py)"]
+    C["AI Diagnosis Engine (prompts/diagnose_prompt.md, src/ai_engine.py)"]
+    D["Human Review: Accept / Edit / Reject (netsage_cli.py or app/ dashboard)"]
+    E["Verified fix / CLI commands"]
+    F["Responsible AI Log (docs/responsible_ai_log.md)"]
+
+    A --> B
+    B -->|rule findings passed in as pre-verified context| C
+    C --> D
+    D --> E
+    D --> F
+
+    classDef stage fill:#10151f,stroke:#2dd4e8,color:#e7edf6,stroke-width:1.5px;
+    classDef terminal fill:#0d1220,stroke:#5a6478,color:#e7edf6,stroke-width:1px;
+    class A,B,C,D stage;
+    class E,F terminal;
 ```
 
 The rule engine always runs first and its findings are fed into the AI
