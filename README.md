@@ -74,11 +74,19 @@ pip install -r requirements.txt --break-system-packages
 that mark the system Python as externally managed; drop it if `pip`
 doesn't complain without it, or better, install into a virtualenv instead.
 
-**Windows (PowerShell):**
+**Windows (PowerShell — prompt shows `PS C:\...>`):**
 
 ```powershell
 Copy-Item .env.example .env
 # edit .env and add your GEMINI_API_KEY
+pip install -r requirements.txt
+```
+
+**Windows (Command Prompt / cmd.exe — prompt shows `C:\...>` with no `PS`):**
+
+```cmd
+copy .env.example .env
+:: edit .env and add your GEMINI_API_KEY
 pip install -r requirements.txt
 ```
 
