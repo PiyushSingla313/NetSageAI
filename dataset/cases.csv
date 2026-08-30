@@ -1,0 +1,105 @@
+"case_id","timestamp","domain","osi_layer","osi_layer_name","symptom","cli_snippet","root_cause","confidence","confidence_tier","next_command_device","next_command_cmd","fix_step_1","fix_step_2","fix_step_3","outcome"
+"NS-001","2026-02-01T09:00:00Z","VLAN","2","Data Link","PC in Sales department cannot reach any other PC in Sales, but can ping its own gateway.","show vlan brief
+VLAN Name        Status  Ports
+10  Sales        active  Fa0/1,Fa0/2,Fa0/3,Fa0/4
+20  HR           active  Fa0/6,Fa0/7
+(Fa0/5 not listed under VLAN 10)
+
+show interfaces fa0/5 switchport
+Administrative Mode: static access
+Operational Mode: static access
+Access Mode VLAN: 20 (HR)","Port Fa0/5 is assigned to VLAN 20 (HR) instead of VLAN 10 (Sales), isolating the PC from its intended broadcast domain.","0.85","high","SW1","show vlan brief","interface fa0/5","switchport access vlan 10","","Access port reassigned to VLAN 10. Sales PC regained connectivity, verified with ping to a peer."
+"NS-002","2026-02-01T15:00:00Z","Trunking","2","Data Link","Devices on SW2 in VLAN 30 cannot communicate with devices on VLAN 30 connected to SW1, even though both switches show VLAN 30 active.","show interfaces trunk (SW1)
+Port  Native vlan
+Gi0/1  1
+
+show interfaces trunk (SW2)
+Port  Native vlan
+Gi0/1  99
+
+%CDP-4-NATIVE_VLAN_MISMATCH: Native VLAN mismatch discovered on Gi0/1","Native VLAN mismatch on the trunk link (VLAN 1 on SW1 vs VLAN 99 on SW2) is causing untagged traffic to leak between VLANs and breaking inter-switch communication.","0.85","high","SW1","show interfaces trunk","interface gi0/1","switchport trunk native vlan 99  ! apply consistently on SW1 to match SW2","","Native VLAN aligned to 99 on both switches. CDP warning cleared and cross-switch VLAN 30 traffic resumed."
+"NS-003","2026-02-01T21:00:00Z","DHCP","7","Application","New laptops joining the network cannot obtain an IP address; ipconfig shows a 169.254.x.x address.","show ip dhcp pool SALES
+Pool SALES :
+ Utilization mark (high/low)    : 100 / 0
+ Total addresses                : 50
+ Leased addresses               : 50","The DHCP pool for VLAN 10 is fully exhausted (50/50 leases used), so new clients fail to lease an address and self-assign an APIPA address.","0.93","high","R1","show ip dhcp pool SALES","ip dhcp pool SALES","network 192.168.10.0 255.255.254.0  ! expand pool or shorten lease time","","DHCP pool expanded. New laptops received valid leases within seconds."
+"NS-004","2026-02-02T03:00:00Z","DHCP-Relay","3","Network","Hosts on VLAN 40 (a subnet with no local DHCP server) never receive an IP address from the central DHCP server on VLAN 1.","show run interface vlan 40
+interface Vlan40
+ ip address 192.168.40.1 255.255.255.0
+(no ip helper-address configured)","Vlan40 interface is missing the 'ip helper-address' command, so DHCP broadcasts from VLAN 40 clients are never relayed to the DHCP server on VLAN 1.","0.93","high","R1","show run interface vlan40","interface vlan40","ip helper-address 10.10.10.5","","ip helper-address added to Vlan40. DHCP requests now relayed and VLAN 40 hosts obtained addresses."
+"NS-005","2026-02-02T09:00:00Z","DNS","7","Application","All hosts on the Finance subnet can ping internal servers but cannot reach any website by name, though pinging the website's IP works fine.","ipconfig /all (Finance-PC1)
+DNS Servers . . . . . . . . . . : 10.10.10.50
+
+ping 10.10.10.50
+Request timed out.","The configured DNS server (10.10.10.50) is unreachable, so name resolution fails while direct IP connectivity still works.","0.93","high","R1","show hosts","ip dhcp pool FINANCE","dns-server 10.10.10.51  ! point to a reachable DNS server","","DNS server address corrected. Name resolution verified with nslookup and a browser test."
+"NS-006","2026-02-02T15:00:00Z","Default-Gateway","3","Network","A single PC in the Marketing VLAN cannot reach any device outside its own subnet, but can ping other PCs in the same VLAN.","ipconfig (Marketing-PC5)
+IPv4 Address. . . . . . . . . . . : 192.168.20.15
+Default Gateway . . . . . . . . . : 192.168.20.254","The PC's default gateway is manually set to 192.168.20.254, which does not exist on this subnet; the real gateway is 192.168.20.1, so all off-subnet traffic is dropped.","0.85","high","R1","show ip route","On host: set default gateway to 192.168.20.1","","","Gateway corrected to 192.168.20.1 on the host. Off-subnet connectivity restored, verified with ping."
+"NS-007","2026-02-02T21:00:00Z","Duplicate-IP","3","Network","Two PCs on the same VLAN intermittently lose connectivity and Windows shows an 'IP address conflict' warning.","show ip arp | include 192.168.10.20
+Internet  192.168.10.20   -   0018.d3aa.1122  ARPA  Vlan10
+Internet  192.168.10.20   -   0022.55bb.9f10  ARPA  Vlan10","Two devices are statically configured with the same IP address (192.168.10.20), causing an IP conflict and intermittent connectivity for both.","0.85","high","SW1","show ip arp","Reassign one printer to 192.168.10.21 and update static config","","","Duplicate IP resolved by reassigning one printer. ARP conflict warning cleared."
+"NS-008","2026-02-03T03:00:00Z","Static-Routing","3","Network","Branch office PCs cannot reach the HQ server subnet (10.0.99.0/24); everything else works.","show ip route
+S    192.168.1.0/24 [1/0] via 10.0.0.2
+C    10.0.0.0/30 is directly connected, Serial0/0/0
+(no route to 10.0.99.0/24)","R1's routing table has no static route to the HQ server subnet 10.0.99.0/24, so traffic to that destination is dropped at the branch router.","0.93","high","R1","show ip route static","ip route 10.0.99.0 255.255.255.0 10.0.0.2","","","Static route to 10.0.99.0/24 added on R1. HQ server subnet reachable, verified with traceroute."
+"NS-009","2026-02-03T09:00:00Z","OSPF","3","Network","R1 and R2 are directly connected but their OSPF neighbor relationship never gets past the INIT state.","show ip ospf neighbor (R1)
+Neighbor ID  State     Address
+2.2.2.2      INIT/DR   10.0.0.2
+
+R2: network 10.0.0.0 0.0.0.3 area 1","R2's OSPF network statement places its interface in area 1 while R1's interface is in area 0, an area mismatch that prevents the neighbor adjacency from progressing past INIT.","0.93","high","R2","show ip ospf interface brief","router ospf 1","network 10.0.0.0 0.0.0.3 area 0  ! on R2, correct the area ID","","Area corrected to 0 on R2's interface. Neighbor adjacency advanced to FULL."
+"NS-010","2026-02-03T15:00:00Z","OSPF","3","Network","OSPF neighbor between R2 and R3 keeps flapping between FULL and DOWN every 40-60 seconds.","R2: Hello 10, Dead 40
+R3: Hello 5, Dead 20","Mismatched OSPF hello and dead timers between R2 and R3 (10/40 vs 5/20) are causing the neighbor's dead timer to expire repeatedly, flapping the adjacency.","0.85","high","R3","show ip ospf neighbor detail","interface se0/1/0","ip ospf hello-interval 10","ip ospf dead-interval 40  ! apply on R3 to match R2","Hello/dead timers matched on R3. Neighbor relationship stabilized, no more flapping."
+"NS-011","2026-02-03T21:00:00Z","EIGRP","3","Network","R1 and R2 are both configured for EIGRP but never form a neighbor relationship.","R1: router eigrp 100
+R2: router eigrp 200","R1 and R2 are configured with different EIGRP autonomous system numbers (100 vs 200); EIGRP requires matching AS numbers to form a neighbor adjacency.","0.93","high","R2","show ip eigrp neighbors","no router eigrp 200","router eigrp 100  ! on R2, match R1's AS number","","EIGRP AS corrected to 100 on R2. Neighbors established, routes appeared in the table within 30 seconds."
+"NS-012","2026-02-04T03:00:00Z","ACL","3","Network","Employees in the Guest VLAN can browse the internet but the IT monitoring server cannot ping or poll any guest device.","show access-lists 101
+Extended IP access list 101
+ 10 deny ip any any","Access-list 101 consists of a single 'deny ip any any' with no permit entries above it, blocking all traffic including legitimate monitoring from the IT server.","0.85","high","SW1","show access-lists 101","ip access-list extended 101","5 permit ip host 10.10.5.5 any","","Permit entry added for the IT monitoring server. SNMP polling and ping restored."
+"NS-013","2026-02-04T09:00:00Z","NAT","3","Network","Internal hosts on 192.168.1.0/24 cannot reach the internet even though the router has a valid default route to the ISP.","ip nat inside source list 1 interface GigabitEthernet0/1 overload
+access-list 1 permit 192.168.2.0 0.0.0.255","The NAT access-list (ACL 1) permits the wrong subnet (192.168.2.0/24) instead of the actual internal LAN 192.168.1.0/24, so LAN traffic never matches the NAT rule and isn't translated.","0.93","high","R1","show ip nat translations","no access-list 1 permit 192.168.2.0 0.0.0.255","access-list 1 permit 192.168.1.0 0.0.0.255","","NAT ACL corrected to match the LAN subnet. Internet access restored for all internal hosts."
+"NS-014","2026-02-04T15:00:00Z","NAT","3","Network","An externally-hosted internal web server (192.168.1.100) is unreachable from the internet, though it works fine internally.","ip nat inside source static 192.168.1.101 203.0.113.10
+(web server's actual IP is 192.168.1.100)","The static NAT entry maps the public IP to 192.168.1.101 instead of the web server's real address 192.168.1.100 — a typo in the inside local address.","0.85","high","R1","show ip nat translations","no ip nat inside source static 192.168.1.101 203.0.113.10","ip nat inside source static 192.168.1.100 203.0.113.10","","Static NAT entry corrected to the actual server IP. Web server now reachable from the internet."
+"NS-015","2026-02-04T21:00:00Z","Port-Security","2","Data Link","A user's PC loses network connectivity the moment they plug in a personal wireless router to their switch port.","show interfaces fa0/12 status
+Fa0/12 err-disabled
+
+SecurityViolation Count : 1, Violation Mode: Shutdown","Port security detected a second MAC address on Fa0/12 (from the personal router) and, with violation mode set to shutdown, placed the port into err-disabled state.","0.72","low","SW1","show port-security interface fa0/12","interface fa0/12","shutdown","no shutdown  ! after removing the unauthorized device","Unauthorized device removed and the port re-enabled. Port security violation cleared."
+"NS-016","2026-02-05T03:00:00Z","STP","2","Data Link","Users on the Engineering floor experience random, brief network outages every few minutes even though no cables were unplugged.","%SPANTREE-2-LOOPGUARD_BLOCK: Loop guard blocking port Gi0/2 on VLAN10
+%SPANTREE-2-ROOTGUARD_BLOCK: Port Gi0/1 tried to become root","A spanning-tree topology change is being triggered repeatedly, likely from an unstable redundant link causing recurring TCN events and temporary MAC table flushes across the switches.","0.85","high","SW1","show spanning-tree summary","Check physical cabling on the flapping link; consider spanning-tree portfast on edge ports only","","","Unstable redundant link stabilized. STP topology changes stopped, no more brief outages."
+"NS-017","2026-02-05T09:00:00Z","Duplex-Mismatch","1","Physical","File transfers between two servers on the same switch are extremely slow and show high error counts, though the link light is up.","Gi0/3: Half-duplex, 100Mb/s
+5000 input errors, 4800 CRC, 200 collisions","A duplex mismatch exists between the server NIC (forced full-duplex) and the switch port (auto-negotiated to half-duplex), producing excessive collisions and CRC errors that slow throughput.","0.85","high","SW1","show interfaces gi0/3","interface gi0/3","duplex full","speed 100  ! match server NIC settings on both ends","Duplex and speed matched on both ends. CRC errors and collisions dropped to zero."
+"NS-018","2026-02-05T15:00:00Z","MTU","3","Network","A specific large file transfer over a site-to-site VPN tunnel always stalls partway through, while small transfers work fine.","Tunnel0 MTU 1476 bytes
+ping size 1500 df-bit
+%Error: fragmentation needed but DF bit set","The GRE tunnel's effective MTU (1476) is smaller than the packets being sent with the Don't Fragment bit set, silently black-holing larger packets instead of fragmenting them.","0.85","high","R1","show interfaces tunnel0","interface tunnel0","ip tcp adjust-mss 1436","","TCP MSS adjusted on the tunnel. Large file transfers now complete without stalling."
+"NS-019","2026-02-05T21:00:00Z","Interface-Down","1","Physical","A newly cabled PC shows no link light at all and gets no network access whatsoever.","show interfaces fa0/8
+FastEthernet0/8 is administratively down, line protocol is down","Interface Fa0/8 has been administratively shut down (likely left disabled from a previous configuration), preventing any link from coming up.","0.72","low","SW2","show interfaces fa0/8 status","interface fa0/8","no shutdown","","Interface re-enabled with no shutdown. Link came up immediately."
+"NS-020","2026-02-06T03:00:00Z","Subnetting","3","Network","A newly added PC in the 192.168.5.0/26 subnet cannot reach any other device, including its own gateway, despite correct cabling and VLAN.","ipconfig
+IPv4 Address: 192.168.5.70
+Subnet Mask: 255.255.255.0
+Default Gateway: 192.168.5.65","The PC is still configured with the old /24 subnet mask instead of the new /26 mask, so it calculates the wrong network range and cannot reach the gateway or any other host on the /26 subnet.","0.85","high","SW1","show ip interface brief","On host: set subnet mask to 255.255.255.192","","","Subnet mask corrected to /26 on the host. Gateway and peer connectivity restored."
+"NS-021","2026-02-06T09:00:00Z","Switchport-Mode","2","Data Link","A PC connected to a port that should be a normal access port is receiving tagged VLAN frames and its NIC shows connectivity issues.","show interfaces fa0/15 switchport
+Administrative Mode: trunk
+Operational Mode: trunk","Fa0/15 was never reconfigured back to access mode after being repurposed, so it is still operating as a trunk port and sending tagged frames to an end-user device.","0.85","high","SW1","show interfaces fa0/15 switchport","interface fa0/15","switchport mode access","switchport access vlan 10","Port reconfigured to access mode. End-user device regained normal connectivity."
+"NS-022","2026-02-06T15:00:00Z","Redistribution","3","Network","Hosts in the OSPF domain (Building A) can reach hosts in the EIGRP domain (Building B) but not the reverse.","router eigrp 100
+ redistribute ospf 1 metric 10000 100 255 1 1500
+
+router ospf 1
+(no redistribute eigrp statement present)","Redistribution is configured one-way only (OSPF routes into EIGRP), so EIGRP routes are never advertised into OSPF, making Building B unreachable from Building A.","0.93","high","R1","show ip protocols","router ospf 1","redistribute eigrp 100 subnets","","Two-way redistribution configured. Building B now reachable from Building A."
+"NS-023","2026-02-06T21:00:00Z","Wireless","1","Physical","Employee laptops cannot see the corporate Wi-Fi network 'Corp-Secure' in their list of available networks at all.","show wlan 1
+Status: Disabled
+Broadcast SSID: Disabled","The Corp-Secure WLAN is administratively disabled on the controller, so it is not being broadcast and cannot appear in any client's available network list.","0.93","high","WLC","show wlan summary","wlan 1","no shutdown","broadcast-ssid enable","WLAN re-enabled and SSID broadcast turned on. Corp-Secure now visible to clients."
+"NS-024","2026-02-07T03:00:00Z","Wireless","1","Physical","Wireless users near the break room report frequent disconnections and very slow speeds, while users elsewhere in the building are fine.","AP3 802.11b/g/n Channel: 6
+AP4 802.11b/g/n Channel: 6","AP3 and AP4 have overlapping coverage and are both set to the same channel (6), causing co-channel interference that degrades performance for nearby clients.","0.85","high","AP4","show ap config general AP4","ap config general AP4","channel 11  ! stagger channels between overlapping APs","","AP4 moved to channel 11. Interference cleared, wireless performance restored."
+"NS-025","2026-02-07T09:00:00Z","VTP","2","Data Link","A VLAN created on SW1 does not appear in the VLAN database on SW2 or SW3, even though all three switches are trunked together.","SW1 VTP Domain Name: CorpNet
+SW2 VTP Domain Name: corpnet","VTP domain names are case-sensitive and do not match between SW1 ('CorpNet') and SW2 ('corpnet'), so VTP updates are rejected and the new VLAN never propagates.","0.85","high","SW2","show vtp status","vtp domain CorpNet  ! run on SW2 to match SW1 exactly, including case","","","VTP domain name corrected to match exactly. Switch-2 now shows all VLANs from Switch-1."
+"NS-026","2026-02-07T15:00:00Z","HSRP","3","Network","After R1 (the primary gateway router) is powered off for maintenance, hosts lose their default gateway entirely instead of failing over.","R2: show standby brief
+Interface  Grp  State    Virtual IP
+Gi0/0      2    Standby  192.168.1.1","R2 is configured in HSRP group 2 while R1 (now offline) was in group 1, a group number mismatch that prevents R2 from taking over the shared virtual IP when R1 fails.","0.93","high","R2","show standby brief","interface gi0/0","standby 1 ip 192.168.1.1  ! on R2, correct the group number to 1","","Standby group corrected to 1 on R2. Gateway failover verified after R1 was taken offline."
+"NS-027","2026-02-07T21:00:00Z","EtherChannel","2","Data Link","An EtherChannel bundle between SW1 and SW2 fails to form; both physical links stay up individually but no Port-channel interface comes up.","SW1: channel-group 1 mode active
+SW2: channel-group 1 mode on","SW1's ports are set to LACP 'active' mode while SW2's ports are set to static 'on' mode; these modes are incompatible, so the channel never negotiates and both ports remain independent.","0.85","high","SW2","show etherchannel summary","interface range gi0/1-2","channel-group 1 mode active  ! on SW2, match SW1's LACP mode","","LACP mode matched on both switches. Port-channel formed and traffic load-balanced across both links."
+"NS-028","2026-02-08T03:00:00Z","BGP","3","Network","R1's eBGP session to the ISP router never reaches the Established state.","show ip bgp summary
+Neighbor 203.0.113.1  AS 65003  State: Idle","R1 is configured to peer with the ISP using the wrong remote AS number (65003 instead of the correct 65002), so the BGP session cannot establish.","0.93","high","R1","show ip bgp summary","router bgp 65001","no neighbor 203.0.113.1 remote-as 65003","neighbor 203.0.113.1 remote-as 65002","Remote AS corrected to 65002. BGP session reached Established state."
+"NS-029","2026-02-08T09:00:00Z","IPv6","3","Network","Hosts with valid IPv6 addresses cannot ping each other across R1, even though IPv6 addresses are configured on all interfaces.","show run | include ipv6 unicast-routing
+(no output - command not present)","IPv6 unicast routing has not been enabled globally on R1 ('ipv6 unicast-routing' is missing), so the router will not forward IPv6 packets between VLANs despite interfaces having addresses.","0.85","high","R1","show ipv6 route","ipv6 unicast-routing","","","IPv6 unicast routing enabled on R1. Hosts across VLANs now ping successfully over IPv6."
+"NS-030","2026-02-08T15:00:00Z","Syslog","4","Transport","The central log server stops receiving any messages from R1, though R1 is configured to send logs there.","logging host 10.10.5.20
+access-list 110
+ 10 permit tcp any any eq 22
+ 20 deny ip any any","ACL 110 on the outbound interface has no permit entry for UDP 514, so the 'deny ip any any' at the end silently blocks all syslog traffic to the log server.","0.72","low","R1","show access-lists 110","ip access-list extended 110","15 permit udp any host 10.10.5.20 eq 514","","Permit rule added for UDP 514. Syslog server began receiving messages from R1 again."

@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+app/node_modules/
+app/dist/
+dataset/review_log.json
+dataset/evaluation_results.json
+dataset/rule_check_results.json
