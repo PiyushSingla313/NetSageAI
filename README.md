@@ -62,10 +62,24 @@ diagnosis prompt as pre-verified facts (see `_build_user_prompt` in
 
 ### 1. Environment setup
 
+**Linux / macOS (bash):**
+
 ```bash
 cp .env.example .env
 # edit .env and add your GEMINI_API_KEY
 pip install -r requirements.txt --break-system-packages
+```
+
+`--break-system-packages` is only needed on distros (e.g. Debian/Ubuntu)
+that mark the system Python as externally managed; drop it if `pip`
+doesn't complain without it, or better, install into a virtualenv instead.
+
+**Windows (PowerShell):**
+
+```powershell
+Copy-Item .env.example .env
+# edit .env and add your GEMINI_API_KEY
+pip install -r requirements.txt
 ```
 
 If no API key is set, or the call fails/rate-limits, the AI engine
